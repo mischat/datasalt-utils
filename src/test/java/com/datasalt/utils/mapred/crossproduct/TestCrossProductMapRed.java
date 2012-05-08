@@ -23,8 +23,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 
-
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -37,12 +35,11 @@ import org.apache.thrift.TException;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.datasalt.utils.commons.HadoopUtils;
+import com.datasalt.pangool.utils.HadoopUtils;
 import com.datasalt.utils.commons.count.Counter;
 import com.datasalt.utils.commons.count.Counter.Count;
 import com.datasalt.utils.commons.test.BaseTest;
 import com.datasalt.utils.io.Serialization;
-import com.datasalt.utils.mapred.crossproduct.CrossProductMapRed;
 import com.datasalt.utils.mapred.crossproduct.CrossProductMapRed.CrossProductMapper;
 import com.datasalt.utils.mapred.crossproduct.io.CrossProductExtraKey;
 import com.datasalt.utils.mapred.crossproduct.io.CrossProductPair;
@@ -115,7 +112,7 @@ public class TestCrossProductMapRed  extends BaseTest {
 		Text txt2 = new Text();
 		if(twoSteps) {
 
-			reader = new SequenceFile.Reader(fS, new Path(OUTPUT, "EXTRA-r-00000"), conf);
+			reader = new SequenceFile.Reader(fS, new Path(OUTPUT, "EXTRA/part-r-00000"), conf);
 	
 			/*
 			 * Assert intermediate "big groups" output

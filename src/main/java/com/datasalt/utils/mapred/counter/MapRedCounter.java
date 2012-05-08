@@ -17,8 +17,10 @@
 package com.datasalt.utils.mapred.counter;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,12 +35,15 @@ import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputsPatched;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.thrift.TBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.datasalt.pangool.tuplemr.mapred.lib.output.HadoopOutputFormat;
+import com.datasalt.pangool.tuplemr.mapred.lib.output.PangoolMultipleOutputs;
+import com.datasalt.pangool.tuplemr.mapred.lib.output.ProxyOutputFormat;
+import com.datasalt.pangool.utils.DCUtils;
 import com.datasalt.utils.commons.HadoopUtils;
 import com.datasalt.utils.io.LongPairWritable;
 import com.datasalt.utils.io.Serialization;
@@ -263,7 +268,7 @@ public class MapRedCounter {
 
 		final static Logger log = LoggerFactory.getLogger(MapRedCountReducer.class);
 
-		MultipleOutputsPatched mos;
+		PangoolMultipleOutputs mos;
 
 		LongWritable currentItemCount = new LongWritable();
 
@@ -285,7 +290,7 @@ public class MapRedCounter {
 		@SuppressWarnings("unchecked")
 		protected void setup(Context context) throws IOException, InterruptedException {
 			super.setup(context);
-			mos = new MultipleOutputsPatched(context);
+			mos = new PangoolMultipleOutputs(context);
 			ser = new Serialization(context.getConfiguration());
 			// Iterate over the configuration to see if there is any minimum count configured for certain groups
 			for(Map.Entry<String, String> entry : context.getConfiguration()) {
@@ -388,7 +393,7 @@ public class MapRedCounter {
 				totalCount += itemCount;
 
 				countFileKey.setItem(itemGroupSignature);
-				mos.write(Outputs.COUNTFILE + "", countFileKey, itemResult);
+				mos.write(Outputs.COUNTFILE.toString(), countFileKey, itemResult);
 				ctx.getCounter(hadoopCounter, Counters.OUT_TOTAL_ITEMS + "").increment(itemResult.get());
 				ctx.getCounter(hadoopCounter, Counters.OUT_NUM_ITEMS + "").increment(1);
 				distinctCount++;
@@ -402,7 +407,7 @@ public class MapRedCounter {
 				totalResults.setValue2(distinctCount);
 				ctx.getCounter(hadoopCounter, Counters.OUT_TOTAL_DISTINCTS + "").increment(distinctCount);
 				ctx.getCounter(hadoopCounter, Counters.OUT_NUM_GROUPS + "").increment(1);
-				mos.write(Outputs.COUNTDISTINCTFILE + "", countDistinctFileKey, totalResults);
+				mos.write(Outputs.COUNTDISTINCTFILE.toString(), countDistinctFileKey, totalResults);
 			}
 		}
 	}
@@ -446,11 +451,23 @@ public class MapRedCounter {
 		FileOutputFormat.setOutputPath(job, output);
 
 		// Multioutput configuration
-		MultipleOutputsPatched.setCountersEnabled(job, true);
-		MultipleOutputsPatched.addNamedOutput(job, Outputs.COUNTFILE.toString(), SequenceFileOutputFormat.class,
-		    CounterKey.class, LongWritable.class);
-		MultipleOutputsPatched.addNamedOutput(job, Outputs.COUNTDISTINCTFILE.toString(), SequenceFileOutputFormat.class,
-		    CounterDistinctKey.class, LongPairWritable.class);
+		String uniqueName = UUID.randomUUID().toString() + '.' + "out-format.dat";
+
+		PangoolMultipleOutputs.setCountersEnabled(job, true);
+		try {
+			
+			DCUtils.serializeToDC(new HadoopOutputFormat(SequenceFileOutputFormat.class), uniqueName, conf);
+			job.getConfiguration().set(ProxyOutputFormat.PROXIED_OUTPUT_FORMAT_CONF, uniqueName);
+			job.setOutputFormatClass(ProxyOutputFormat.class);
+			
+			PangoolMultipleOutputs.addNamedOutput(job, Outputs.COUNTFILE.toString(), new HadoopOutputFormat(SequenceFileOutputFormat.class),
+			    CounterKey.class, LongWritable.class);
+			PangoolMultipleOutputs.addNamedOutput(job, Outputs.COUNTDISTINCTFILE.toString(), new HadoopOutputFormat(SequenceFileOutputFormat.class),
+			    CounterDistinctKey.class, LongPairWritable.class);
+		} catch(URISyntaxException e) {
+			throw new IOException(e);
+		}
+
 
 		return job;
 	}
